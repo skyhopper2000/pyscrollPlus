@@ -7,25 +7,38 @@ on:
     branches: [ master ]
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
-    name: Python ${{ matrix.python-version }}
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+        backend: ['pygame', 'pygame-ce']
+        exclude:
+          # pygame (non-ce) 2.6.1 publishes no CPython 3.14 wheels, and a
+          # source build needs SDL dev headers. Re-enable when wheels ship.
+          - python-version: '3.14'
+            backend: 'pygame'
+    name: Python ${{ matrix.python-version }} / ${{ matrix.backend }}
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-          python-version: ${{ matrix.python-version }}
-          architecture: x64
+        python-version: ${{ matrix.python-version }}
+        allow-prereleases: true
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install flake8 pytest
-        pip install pygame pytmx
+        # Only one backend may be installed: pygame and pygame-ce both
+        # provide the `pygame` import package.
+        pip install "${{ matrix.backend }}" pytmx
+        pip install -e . --no-deps
+        python -c "import pygame; print(pygame.version.ver)"
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -33,5 +46,28 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test
+      run: python -m pytest tests -v
+
+  package:
+    runs-on: ubuntu-latest
+    name: Build and check distributions
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    - name: Build sdist and wheel
       run: |
-         python -m unittest discover -s tests/pyscroll -p "test_*.py"
+        python -m pip install --upgrade pip build twine
+        python -m build
+    - name: Check metadata
+      run: twine check --strict dist/*
+    - name: Smoke-test wheel install
+      env:
+        SDL_VIDEODRIVER: dummy
+      run: |
+        python -m venv "$RUNNER_TEMP/smoke"
+        "$RUNNER_TEMP/smoke/bin/pip" install pygame-ce dist/*.whl
+        cd "$RUNNER_TEMP"
+        "$RUNNER_TEMP/smoke/bin/python" -c "import pyscroll; print(pyscroll.__version__)"
