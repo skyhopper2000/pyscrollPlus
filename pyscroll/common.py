@@ -18,14 +18,6 @@ def surface_clipping_context(surface: Surface, clip: RectLike):
     surface.set_clip(original)
 
 
-def rect_difference(a: RectLike, b: RectLike) -> list[Rect]:
-    """
-    Compute difference of two rects.  Returns up to 4.
-
-    """
-    raise NotImplementedError
-
-
 def rect_to_bb(rect: RectLike) -> tuple[int, int, int, int]:
     x, y, w, h = rect
     return x, y, x + w - 1, y + h - 1

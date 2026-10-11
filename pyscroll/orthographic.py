@@ -55,15 +55,20 @@ class BufferedRenderer:
 
         Args:
             data: reference to data source
-            size: if true, cannot scroll past map edge
-            clamp_camera: determines how tile animations are processed
+            size: pixel size of the view (width, height)
+            clamp_camera: if true, cannot scroll past map edge
             colorkey: used for enabling transparent layers.  not needed usually
             alpha: used for enabling transparent layers.  not needed usually
-            time_source: used to get time when cycling tile animations
+            time_source: callable returning the current time in seconds, used
+                when cycling tile animations.  it is installed on the data
+                adapter, so replacing it (or this attribute) changes the clock
+                the animations follow.  useful to pause, slow down, or test
+                animations deterministically
             scaling_function: what function to use when scaling the zoom buffer
             tall_sprites: deprecated.  will be removed in future
             sprite_damage_height: modify when sprites are drawn over tiles on another layer
-            zoom: negative numbers make map smaller, positive numbers zoom in
+            zoom: values above 1.0 zoom in (map appears larger), values between
+                0.0 and 1.0 zoom out.  must be greater than 0.0
         """
 
         # default options
@@ -120,6 +125,26 @@ class BufferedRenderer:
 
         if self.tall_sprites != 0:
             log.warning("using tall_sprites feature is not supported")
+
+    @property
+    def time_source(self) -> Callable[[], float]:
+        """
+        Callable returning the current time in seconds, used for tile animations.
+
+        Setting this also installs the clock on the data adapter, so animations
+        follow it.  For example, a clock that stops advancing pauses animations.
+
+        """
+        return self._time_source
+
+    @time_source.setter
+    def time_source(self, value: Callable[[], float]) -> None:
+        self._time_source = value
+        # data adapters that do not subclass PyscrollDataAdapter may not
+        # support custom clocks; they keep using their own timing
+        set_time_source = getattr(self.data, "set_time_source", None)
+        if set_time_source is not None:
+            set_time_source(value)
 
     def reload(self) -> None:
         """
@@ -224,22 +249,24 @@ class BufferedRenderer:
             drawing to an area smaller that the whole window/screen
 
         surfaces may optionally be passed that will be blitted onto the surface.
-        this must be a sequence of tuples containing a layer number, image, and
-        rect in screen coordinates.  surfaces will be drawn in order passed,
-        and will be correctly drawn with tiles from a higher layer overlapping
-        the surface.
+        this must be a sequence of tuples containing an image, a rect in
+        screen coordinates, and a layer number.  surfaces will be drawn in
+        order passed, and will be correctly drawn with tiles from a higher
+        layer overlapping the surface.
 
         surfaces list should be in the following format:
-        [ (layer, surface, rect), ... ]
+        [ (surface, rect, layer), ... ]
 
         or this:
-        [ (layer, surface, rect, blendmode_flags), ... ]
+        [ (surface, rect, layer, blendmode_flags), ... ]
 
         Args:
             surface: surface to draw to
             rect: area to draw to
             surfaces: optional sequence of surfaces to interlace between tiles
-            rect: area that was drawn over
+
+        Returns:
+            Rect: area that was drawn over
 
         """
         if self._zoom_level == 1.0:
@@ -269,10 +296,6 @@ class BufferedRenderer:
         self._zoom_level = value
         self._initialize_buffers(zoom_buffer_size)
 
-        zoom_buffer_size = self._zoom_buffer.get_size()
-        self._real_ratio_x = float(self._size[0]) / zoom_buffer_size[0]
-        self._real_ratio_y = float(self._size[1]) / zoom_buffer_size[1]
-
     def set_size(self, size: Vector2DInt) -> None:
         """
         Set the size of the map in pixels.
@@ -295,7 +318,8 @@ class BufferedRenderer:
             surface: where to draw
 
         """
-        # TODO/BUG: Animated tiles are getting reset here
+        # animated tiles keep their current frame: the data adapter returns
+        # the active animation frame (see PyscrollDataAdapter._animated_tile)
         log.debug("pyscroll buffer redraw")
         self._clear_surface(self._buffer)
         self._tile_queue = self.data.get_tile_images_by_rect(self._tile_view)
@@ -454,7 +478,8 @@ class BufferedRenderer:
         hit = self._layer_quadtree.hit
         get_tile = self.data.get_tile_image
         tile_layers = tuple(sorted(self.data.visible_tile_layers))
-        top_layer = tile_layers[-1]
+        # with no visible tile layers, no tile can overlap the surfaces
+        top_layer = tile_layers[-1] if tile_layers else None
         blit_list = list()
         sprite_damage = set()
         order = 0
@@ -464,7 +489,7 @@ class BufferedRenderer:
             s, r, l = i[:3]
 
             # sprite must not be over the top layer for damage to matter
-            if l <= top_layer:
+            if top_layer is not None and l <= top_layer:
                 damage_rect = Rect(i[1])
                 damage_rect.move_ip(ox, oy)
                 # tall sprites only damage a portion of the bottom of their sprite
@@ -633,6 +658,12 @@ class BufferedRenderer:
         self._half_height = view_size[1] // 2
         self._x_offset = 0
         self._y_offset = 0
+
+        # zooming slightly changes the aspect ratio because the zoom buffer
+        # size is truncated to whole pixels; these ratios compensate for it
+        # when translating world coordinates to screen coordinates
+        self._real_ratio_x = float(self._size[0]) / view_size[0]
+        self._real_ratio_y = float(self._size[1]) / view_size[1]
 
         rects = [
             make_rect(*i)
