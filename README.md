@@ -13,6 +13,8 @@ https://liberapay.com/ltheden/donate
 
 Discord! https://discord.gg/2taTP4aYR6
 
+Documentation: https://pyscrollplus.readthedocs.io
+
 
 Introduction
 ============
@@ -34,14 +36,19 @@ Features
 - Sprites or plain surfaces can be drawn in layers
 - Animated tiles
 - Zoom in and out
+- Translate world coordinates to screen coordinates (`translate_point`,
+  `translate_rect`, ...)
+- Optional camera clamping: stop at the map edges, or scroll past them
+- Per-sprite blend modes
 - Includes optional drop-in replacement for pygame LayeredGroup
 - Pixel alpha and colorkey tilesets are supported
-- Drawing and scrolling shapes
+- Stitch several maps into one world with `MapAggregator` (experimental)
 - Fast and small footprint
 - Speed is not affected by map size
 - Support for pytmx loaded maps from Tiled Map Editor
+- Plug in your own map format with a small adapter class
 
- 
+
 Use It Like a Camera
 ====================
 
@@ -61,10 +68,17 @@ Install from pip
 
     pip install pyscroll
 
+pyscroll needs pygame 2.0+ or pygame-ce, and doesn't install either for you.
+Install the one you use (`pip install pygame-ce` or `pip install pygame`), but
+not both: they share the `pygame` module and overwrite each other.
 
-You can also manually install it from source
+pytmx is optional. Install it to load maps from the Tiled Map Editor:
 
-    python setup.py install
+    pip install pytmx
+
+You can also install it from a clone of the source
+
+    pip install .
 
 
 New Game Tutorial
@@ -92,7 +106,8 @@ Example Use with pytmx
 ======================
 
 pyscroll and pytmx can load your maps from Tiled and use your pygame sprites.
-The following is a very basic way to load a map onto the screen.
+The following is a very basic way to load a map onto the screen.  It uses
+`desert.tmx` and `hero.png` from `apps/demo`.
 
 ```python
 from pytmx.util_pygame import load_pygame
@@ -106,9 +121,13 @@ class Sprite(pygame.sprite.Sprite):
     
     """
     def __init__(self, surface) -> None:
+        super().__init__()
         self.image = surface
         self.rect = surface.get_rect()
 
+
+pygame.init()
+screen = pygame.display.set_mode((400, 400))
 
 # Load TMX data
 tmx_data = load_pygame("desert.tmx")
@@ -123,7 +142,7 @@ map_layer = pyscroll.BufferedRenderer(
 group = pyscroll.PyscrollGroup(map_layer=map_layer)
 
 # Add sprite(s) to the group
-surface = pygame.image.load("my_surface.png").convert_alpha()
+surface = pygame.image.load("hero.png").convert_alpha()
 sprite = Sprite(surface)
 group.add(sprite)
 
@@ -134,15 +153,21 @@ group.center(sprite.rect.center)
 # Notice I did not `screen.fill` here!  Clearing the screen is not
 # needed since the map will clear it when drawn
 group.draw(screen)
+pygame.display.flip()
 ```
+
+The documentation has a complete game loop, and covers zoom, translating
+coordinates, layers, animated tiles and more:
+https://pyscrollplus.readthedocs.io
 
 
 Adapting Existing Games / Map Data
 ==================================
 
 pyscroll can be used with existing map data, but you will have to create a
-class to interact with pyscroll or adapt your data handler.  Try to make it
-follow the same API as the TiledMapData adapter and you should be fine.
+class to interact with pyscroll or adapt your data handler.  Subclass
+`pyscroll.PyscrollDataAdapter`; the "Custom data adapters" page of the
+documentation lists what it needs.
 
 #### Give pyscroll surface to layer into the map
 
@@ -161,13 +186,15 @@ def game_engine_draw():
       # pyscroll uses normal pygame surfaces.
       surface = game_object.get_surface()
 
-      # pyscroll will draw surfaces in screen coordinates, so translate them
+      # pyscroll will draw surfaces in screen coordinates, so move the
+      # world rect by the camera offset.
       # you need to use a rect to handle tiles that cover surfaces.
-      rect = game_object.get_screen_rect()
+      rect = game_object.get_world_rect().move(map_layer.get_center_offset())
 
       # the list called 'surfaces' is required for pyscroll
       # notice the layer.  this determines which layers the sprite will cover.
       # layer numbers higher than this will cover the surface
+      # an optional 4th item sets blend flags, e.g. pygame.BLEND_RGB_ADD
       surfaces.append((surface, rect, game_object.layer))
 
    # tell pyscroll to draw to the screen, and use the surfaces supplied
@@ -178,12 +205,13 @@ def game_engine_draw():
 FAQ
 ===
 
-## Why are tiles repeating while scrolling?
-Pyscroll by default will not handle maps that are not completely filled with
-tiles.  This is in consideration of drawing speed.  To clarify, you can have
-several layers, some layers without tiles, and that is fine; the problem is
-when there are empty spaces in all the layers, leaving gaps in the entire map.
-There are two ways to fix this issue with the 1st solution being the best
+More answers are in the "Transparency & FAQ" page of the documentation.
+
+## Why are parts of my map black?
+Pyscroll is fastest with maps that are completely filled with tiles.  You can
+have several layers, some layers without tiles, and that is fine; but where
+there are empty spaces in all the layers, the renderer clears the gap to
+black.  There are two ways to fix this, with the 1st solution being the best
 performance wise:
 
 ##### 1. In Tiled (or your data), fill in the empty spots with a tile
@@ -194,14 +222,9 @@ virtually no penalty.
 
 ##### 2. Pass "alpha=True" to the BufferedRenderer constructor.
 All internal buffers will now support 'per-pixel alpha' and the areas without
-tiles will be fully transparent.  You *may* still have graphical oddities
-depending on if you clear the screen or not, so you may have to experiment
-here.  Since per-pixel alpha buffers are used, overall performance will be
-reduced by about 33%
+tiles will be fully transparent, so draw something under the map first.
+Since per-pixel alpha buffers are used, overall performance will be reduced.
 
-
-## Why are there obvious/ugly 'streaks' when scrolling?
-Streaks are caused by missing tiles.  See the above answer for solutions.
 
 ## Can I blit anything 'under' the scrolling map layer?
 Yes!  There are two ways to handle this situation...both are experimental, but
@@ -230,6 +253,7 @@ transparent areas under the map, then you will have to use the "alpha", or
 "colorkey" methods described above.
 
 ## Does pyscroll support parallax layers?
-Not directly.  However, you can build you own parallax effects by passing
-"alpha=True" to the BufferedRenderer constructor and using one renderer for
-each layer. Then it is just a matter of scrolling at different speeds.
+Not directly yet (it is planned).  However, you can build you own parallax
+effects by passing "alpha=True" to the BufferedRenderer constructor and using
+one renderer for each layer. Then it is just a matter of scrolling at
+different speeds.  The "Parallax" page of the documentation has an example.
