@@ -7,6 +7,7 @@ as a template.  Just fill in values that work for your game.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from heapq import heappop, heappush
 from itertools import product
 
@@ -46,6 +47,11 @@ class PyscrollDataAdapter:
     tile_size = None  # (int, int): size of each tile in pixels
     map_size = None  # (int, int): size of map in tiles
     visible_tile_layers = None  # list of visible layer integers
+
+    # callable returning the current time in seconds; drives tile animations.
+    # defined on the class so adapters that do not call super().__init__
+    # still work.  staticmethod prevents binding if a python function is used.
+    time_source = staticmethod(time.time)
 
     def __init__(self) -> None:
         self._last_time = None  # last time map animations were updated
@@ -122,14 +128,38 @@ class PyscrollDataAdapter:
 
         return new_tiles
 
+    def set_time_source(self, time_source: Callable[[], float]) -> None:
+        """
+        Set the clock used for tile animations.
+
+        Pending animation frames are rescheduled relative to the new clock,
+        so switching clocks does not skip or stall animations.  The
+        BufferedRenderer calls this with its own `time_source`.
+
+        Args:
+            time_source: callable returning the current time in seconds
+
+        """
+        if time_source is self.time_source:
+            return
+        previous_time = getattr(self, "_last_time", None)
+        self.time_source = time_source
+        if previous_time is None:
+            return
+        self._update_time()
+        delta = self._last_time - previous_time
+        # shifting every token by the same amount keeps the heap ordered
+        for token in getattr(self, "_animation_queue", ()):
+            token.next += delta
+
     def _update_time(self) -> None:
         """
-        Update the internal clock.
+        Update the internal clock, in milliseconds, from the time source.
 
         This may change in future versions.
 
         """
-        self._last_time = time.time() * 1000
+        self._last_time = self.time_source() * 1000
 
     def prepare_tiles(self, tiles: RectLike):
         """
@@ -158,6 +188,9 @@ class PyscrollDataAdapter:
         self._animation_queue = list()
         self._tracked_gids = set()
         self._animation_map = dict()
+        # drop frame substitutions from the previous animations; they may
+        # reference stale images or positions that are no longer animated
+        self._animated_tile = dict()
 
         for gid, frame_data in self.get_animations():
             self._tracked_gids.add(gid)
@@ -365,16 +398,22 @@ class TiledMapData(PyscrollDataAdapter):
         for l in self.tmx.visible_tile_layers:
             for y, row in rev(layers[l].data, y1, y2):
                 for x, gid in [i for i in rev(row, x1, x2) if i[1]]:
-                    # since the tile has been queried, assume it wants
-                    # to be checked for animations sometime in the future
                     if track and gid in tracked_gids:
-                        anim_map[gid].positions.add((x, y, l))
-                    try:
-                        # animated, so return the correct frame
-                        tile = at[(x, y, l)]
-                    except KeyError:
-                        # not animated, so return surface from data, if any
-                        tile = images[gid]
+                        # since the tile has been queried, assume it wants
+                        # to be checked for animations sometime in the future
+                        position = x, y, l
+                        token = anim_map[gid]
+                        token.positions.add(position)
+                        # use the frame the animation is currently showing, so
+                        # tiles entering the view (scroll, redraw) stay in sync
+                        tile = at[position] = token.frames[token.index].image
+                    else:
+                        try:
+                            # animated, so return the correct frame
+                            tile = at[(x, y, l)]
+                        except KeyError:
+                            # not animated, so return surface from data, if any
+                            tile = images[gid]
                     if tile:
                         yield x, y, l, tile
 

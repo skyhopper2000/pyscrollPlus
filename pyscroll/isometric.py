@@ -1,4 +1,16 @@
+"""
+Isometric helpers and an EXPERIMENTAL isometric renderer.
+
+`vector2_to_iso` and `vector3_to_iso` are supported helpers for converting
+cartesian coordinates to isometric coordinates.
+
+`IsometricBufferedRenderer` is experimental and currently NOT functional: it
+fails during construction.  It is not exported from the `pyscroll` package and
+is kept here only as a starting point for a future rewrite.  Do not use it.
+"""
+
 import logging
+import warnings
 
 from pyscroll.common import Vector2D, Vector2DInt
 from pyscroll.orthographic import BufferedRenderer
@@ -41,7 +53,19 @@ class IsometricBufferedRenderer(BufferedRenderer):
 
     - coalescing of surfaces is not supported
     - drawing may have depth sorting issues
+
+    EXPERIMENTAL and NOT functional: construction currently fails.  It is not
+    exported from the `pyscroll` package.  See the module docstring.
     """
+
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "IsometricBufferedRenderer is experimental and not functional; "
+            "it is expected to fail.  Use BufferedRenderer instead.",
+            UserWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
     def _draw_surfaces(self, surface, rect, surfaces) -> None:
         if surfaces is not None:
@@ -114,9 +138,7 @@ class IsometricBufferedRenderer(BufferedRenderer):
         self._x_offset = iso[0]
         self._y_offset = iso[1]
 
-        print(self._tile_view.size)
         assert self._buffer
-        print(self._buffer.get_size())
 
         # center the buffer on the screen
         self._x_offset += (self._buffer.get_width() - self.view_rect.width) // 2
@@ -155,6 +177,5 @@ class IsometricBufferedRenderer(BufferedRenderer):
     #             tile = self.data.get_tile_image((ix, iy, 0))
     #             if tile:
     #                 self._tile_queue.append((x, y, 0, tile, 0))
-    #                 print((x, y), (ix, iy))
     #
     #     self._flush_tile_queue()

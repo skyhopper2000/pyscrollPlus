@@ -1,6 +1,5 @@
 from .data import PyscrollDataAdapter, TiledMapData
 from .group import PyscrollGroup
-from .isometric import IsometricBufferedRenderer
 from .orthographic import BufferedRenderer
 
 __version__ = 2, 31
