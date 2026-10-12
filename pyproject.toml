@@ -1,35 +1,48 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyscroll"
-version = "2.31"
+dynamic = ["version"]
 description = "Fast scrolling maps library for pygame"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "LGPL-3.0-or-later"
+license-files = ["COPYING", "COPYING.LESSER"]
 authors = [
     {name = "bitcraft", email = "leif.theden@gmail.com"}
 ]
 classifiers = [
         "Intended Audience :: Developers",
         "Development Status :: 5 - Production/Stable",
-        "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Topic :: Games/Entertainment",
         "Topic :: Multimedia :: Graphics",
         "Topic :: Software Development :: Libraries :: pygame",
 ]
 requires-python = ">=3.9"
+# pygame is intentionally NOT a hard dependency so that pygame-ce users can
+# install pyscroll without pulling in pygame. Pick a backend via an extra.
+
+[project.optional-dependencies]
+pygame = ["pygame>=2.0"]
+pygame-ce = ["pygame-ce>=2.1"]
+tiled = ["pytmx>=3.32"]
 
 [project.urls]
 source = "https://github.com/bitcraft/pyscroll"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.dynamic]
+# pyscroll.__version__ is a tuple, e.g. (2, 31); setuptools joins it as "2.31".
+version = {attr = "pyscroll.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]

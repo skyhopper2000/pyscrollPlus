@@ -35,3 +35,13 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# Sphinx build output
+docs/_build/
+
+# pytest
+.pytest_cache/
+
+# Claude Code agent worktrees and local settings
+.claude/worktrees/
+.claude/settings.local.json
