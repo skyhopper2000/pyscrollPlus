@@ -1,122 +1,58 @@
-.. pyscroll documentation master file, created by
-   sphinx-quickstart on Mon May 19 21:53:31 2014.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 pyscroll
 ========
 
-for Python 3.9+ and Pygame 1.9
+A simple and fast module for animated scrolling maps for your new or existing
+pygame game.
 
-A simple, fast module for adding scrolling maps to your new or existing game.
-Includes support to load and render maps in TMX format from the Tiled map editor.
-
-
-Introduction
-============
-
-pyscroll is a generic module for making a fast scrolling image with PyGame.  It
-uses a lot of magic to get reasonable framerates out of PyGame.  It only exists
-to draw a map.  It doesn't load images or data, so you can use your own custom
-data structures, tile storage, ect.
-
-The included class, BufferedRenderer, gives great framerates, supports layered
-rendering and can draw itself.
-
-pyscroll is compatible with pytmx (https://github.com/bitcraft/pytmx), so you
-can use your Tiled maps.  It also has out-of-the-box support for PyGame Sprites.
-
+pyscroll draws a tile map into an off-screen buffer and only redraws the tiles
+that scroll into view, so drawing speed does not depend on map size. It doesn't
+load images or map files itself: maps made with the `Tiled map editor
+<https://www.mapeditor.org/>`_ work out of the box through `pytmx
+<https://github.com/bitcraft/pytmx>`_, and any other map format can be plugged
+in with a small adapter class.
 
 Features
-========
+--------
 
-- Fast and small footprint
-- Layered drawing for tiles
-- Drawing and scrolling shapes
-- Dirty screen updates
-- Pygame Sprite compatible group included
+- Fast, with a small footprint. Speed is not affected by map size.
+- Layered drawing: sprites and plain surfaces are drawn between tile layers, so
+  tiles on higher layers cover them.
+- :class:`~pyscroll.PyscrollGroup`, a drop-in replacement for pygame's
+  ``LayeredUpdates`` that works like a camera.
+- Zoom in and out, and translate world coordinates to screen coordinates.
+- Optional camera clamping to the map edges.
+- Animated tiles from Tiled, and hot reload of the map while the game runs.
+- Per-sprite blend modes.
+- Pixel-alpha and colorkey tilesets; transparent map buffers for drawing the
+  map over a background.
+- Several maps stitched into one world with ``MapAggregator`` (experimental).
 
+Requirements: Python 3.9+, and pygame 2 or pygame-ce. pytmx is only needed to
+load Tiled maps.
 
-Shape Drawing
-=============
+.. code-block:: text
 
-pyscroll has a new experimental feature for drawing shapes to the map and
-scrolling them as part of the map.  This can be useful for game that need to
-draw arbitrary shaped objects.
-
-The feature requires pytmx, and that the map files be created in the Tiled Map
-Editor.  The advantage of of using pyscroll for shape drawing is that pyscroll
-can draw the shapes much more efficiently that simply drawing the shapes each
-frame.
-
-This feature is experimental at best.  Your comments and support is appreciated!
-
-* Currently, shapes will not draw over sprites.
-
-
-New Game Tutorial
-=================
-
-This is a quick guide on building a new game with pyscroll and pygame.  It uses
-the PyscrollGroup for efficient rendering.  You are free to use any other pygame
-techniques and functions.
-
-Open quest.py in the tutorial folder for a gentle introduction to pyscroll and
-the PyscrollGroup for PyGame.  There are plenty of comments to get you started.
-
-The Quest demo shows how you can use a pyscroll group for drawing, how to load
-maps with PyTMX, and how pyscroll can quickly render layers.  Moving under some
-tiles will cause the Hero to be covered.
-
-It will also render a Shape on the map with experimental shape drawing.
-
-
-Example Use with PyTMX
-======================
-
-pyscroll and pytmx can load your maps from Tiled and use you PyGame Sprites.
-
-.. code-block:: python
-
-    # Load TMX data
-    tmx_data = pytmx.load_pygame("desert.tmx")
-
-    # Make data source for the map
-    map_data = pyscroll.TiledMapData(tmx_data)
-
-    # Make the scrolling layer
-    screen_size = (400, 400)
-    map_layer = pyscroll.BufferedRenderer(map_data, screen_size)
-
-    # make the PyGame SpriteGroup with a scrolling map
-    group = pyscroll.PyscrollGroup(map_layer=map_layer)
-
-    # Add sprites to the group
-    group.add(sprite)
-
-    # Center the layer and sprites on a sprite
-    group.center(sprite.rect.center)
-
-    # Draw the layer
-    group.draw(screen)
-
-
-Adapting Existing Games / Map Data
-==================================
-
-pyscroll can be used with existing map data, but you will have to create a
-class to interact with pyscroll or adapt your data handler.
-
+   pip install pyscroll pytmx
 
 .. toctree::
    :maxdepth: 2
+   :caption: Guide
 
+   quickstart
+   camera
+   sprites
+   animation
+   adapters
+   multiple-maps
+   transparency
+   parallax
+   isometric
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
 
-Indices and tables
-==================
+   api
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search`
-

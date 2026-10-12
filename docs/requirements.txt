@@ -1,0 +1,7 @@
+# Requirements for building the documentation (also used by Read the Docs).
+# conf.py imports pyscroll from the source tree, which needs pygame.
+sphinx>=7.2
+furo>=2024.1.29
+myst-parser>=2.0
+pygame-ce>=2.4
+pytmx>=3.32
